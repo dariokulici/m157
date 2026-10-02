@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud
+  namespace: nextcloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nextcloud
+  template:
+    metadata:
+      labels:
+        app: nextcloud
+    spec:
+      hostAliases:
+        - ip: "192.168.1.210"
+          hostnames:
+          - "ipa.ceneo.local"
+      containers:
+        - name: nextcloud
+          image: nextcloud:32-apache
+          ports:
+            - containerPort: 80
+
+          env:
+            - name: POSTGRES_HOST
+              value: postgres-0.postgres.database.svc.cluster.local
+
+            - name: POSTGRES_DB
+              value: nextcloud
+
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: username
+
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: password
+
+            - name: NEXTCLOUD_TRUSTED_DOMAINS
+              value: m157tbz.dynv6.net
+            
+            - name: REDIS_HOST
+              value: redis
+
+            - name: REDIS_HOST_PORT
+              value: "6379"
+
+            - name: REDIS_HOST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+
+          volumeMounts:
+            - name: nextcloud-data
+              mountPath: /var/www/html
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - sh
+                  - -c
+                  - |
+                    while [ ! -d /var/www/html/config ]; do
+                      sleep 2
+                    done
+
+                    cat > /var/www/html/config/proxy.config.php <<'EOF'
+                    <?php
+                    $CONFIG = [
+                      'overwriteprotocol' => 'https',
+                      'overwrite.cli.url' => 'https://m157tbz.dynv6.net',
+
+                      'trusted_proxies' => [
+                        '10.42.0.0/16',
+                        '10.43.0.0/16',
+                      ],
+
+                      'forwarded_for_headers' => [
+                        'HTTP_X_FORWARDED_FOR',
+                        'HTTP_X_FORWARDED_PROTO',
+                      ],
+                    ];
+                    EOF
+      
+
+      volumes:
+        - name: nextcloud-data
+          persistentVolumeClaim:
+            claimName: nextcloud-pvc

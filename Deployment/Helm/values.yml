@@ -1,0 +1,114 @@
+replicaCount: 1
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  path: /
+  pathType: Prefix
+  tls:
+    - secretName: nextcloud-tls
+      hosts:
+        - m157tbz.dynv6.net
+
+nextcloud:
+  host: m157tbz.dynv6.net
+
+  username: nextcloud
+
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-secret
+    usernameKey: nextcloud-username
+    passwordKey: nextcloud-password
+
+  datadir: /var/www/html/data
+
+  configs:
+    overwrite.config.php: |
+      <?php
+      $CONFIG['overwriteprotocol'] = 'https';
+      $CONFIG['overwrite.cli.url'] = 'https://m157tbz.dynv6.net';
+
+internalDatabase:
+  enabled: false
+
+externalDatabase:
+  enabled: false
+  existingSecret:
+    enabled: true
+    secretName: postgres-secret
+    usernameKey: username
+    passwordKey: password
+
+postgresql:
+  enabled: true
+
+  global:
+    postgresql:
+      auth:
+        username: nextcloud
+        database: nextcloud
+
+        existingSecret: postgres-secret
+
+        secretKeys:
+          adminPasswordKey: postgres-password
+          userPasswordKey: password
+
+  primary:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      accessMode: ReadWriteOnce
+      size: 10Gi
+    
+    initdb:
+      scripts:
+        00-nextcloud-permissions.sql: |
+          ALTER DATABASE nextcloud OWNER TO nextcloud;
+          \connect nextcloud
+          GRANT USAGE, CREATE ON SCHEMA public TO nextcloud;
+
+redis:
+  enabled: true
+
+  auth:
+    existingSecret: redis-secret
+    existingSecretPasswordKey: redis-password
+
+  master:
+    persistence:
+      enabled: true
+
+cronjob:
+  enabled: false
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  accessMode: ReadWriteOnce
+  size: 10Gi
+
+imaginary:
+  enabled: false
+
+metrics:
+  enabled: false
+
+mariadb:
+  enabled: false
+
+startupProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 120
+
+livenessProbe:
+  initialDelaySeconds: 300
+
+readinessProbe:
+  initialDelaySeconds: 120
